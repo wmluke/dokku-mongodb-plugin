@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# check if the plugin is already installed
+if [[ -d "$DOKKU_ROOT/.mongodb" ]]; then
+    exit 0
+fi
+
 # Use something different than the default mongodb port to mitigate port collisions with the host
 container_port=17017
 
@@ -12,25 +17,22 @@ echo deb http://downloads-distro.mongodb.org/repo/ubuntu-upstart dist 10gen > /e
 apt-get update
 apt-get -y install mongodb-10gen
 
-if [[ ! -d "$DOKKU_ROOT/.mongodb" ]]; then
-  mkdir -p "$DOKKU_ROOT/.mongodb"
-  mkdir -p "$DOKKU_ROOT/.mongodb/data"
+mkdir -p "$DOKKU_ROOT/.mongodb"
+mkdir -p "$DOKKU_ROOT/.mongodb/data"
 
-  admin_pass=$(openssl rand -base64 32|base64)
-  echo $admin_pass > "$DOKKU_ROOT/.mongodb/admin_pw"
+admin_pass=$(openssl rand -base64 32|base64)
+echo $admin_pass > "$DOKKU_ROOT/.mongodb/admin_pw"
 
-  chown -R dokku: "$DOKKU_ROOT/.mongodb"
+chown -R dokku: "$DOKKU_ROOT/.mongodb"
 
-  docker run -p "$container_port:$container_port" -d -v "$DOKKU_ROOT/.mongodb/data":/tmp/mongo "$db_image" /usr/bin/mongod --dbpath=/tmp/mongo -port "$container_port"
-  id=$(docker ps | grep "$db_image":latest |  awk '{print $1}')
-  mongodb_ip=$(docker port ${id} ${container_port} | awk '{split($0,a,":"); print a[1]}')
-  mongodb_port=$(docker port ${id} ${container_port} | awk '{split($0,a,":"); print a[2]}')
-  if [[ $mongodb_ip = "0.0.0.0" ]]; then
-    mongodb_ip=localhost
-  fi
-
-  sleep 2 # give mongodb some time to start
-  mongo $mongodb_ip:$mongodb_port/admin --eval "db.addUser(\"admin\", \"${admin_pass}\")"
-  docker stop "$id"
+docker run -p "$container_port:$container_port" -d -v "$DOKKU_ROOT/.mongodb/data":/tmp/mongo "$db_image" /usr/bin/mongod --dbpath=/tmp/mongo -port "$container_port"
+id=$(docker ps | grep "$db_image":latest |  awk '{print $1}')
+mongodb_ip=$(docker port ${id} ${container_port} | awk '{split($0,a,":"); print a[1]}')
+mongodb_port=$(docker port ${id} ${container_port} | awk '{split($0,a,":"); print a[2]}')
+if [[ $mongodb_ip = "0.0.0.0" ]]; then
+mongodb_ip=localhost
 fi
 
+sleep 2 # give mongodb some time to start
+mongo $mongodb_ip:$mongodb_port/admin --eval "db.addUser(\"admin\", \"${admin_pass}\")"
+docker stop "$id"
